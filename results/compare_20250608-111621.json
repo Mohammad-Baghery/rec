@@ -1,0 +1,45 @@
+{
+    "target": "D:\\python\\Face Compare\\Face\\Cut\\IMG_0020c.jpg",
+    "matches": [
+        {
+            "file": " (3895).jpg",
+            "similarity": 0.7973247489869024
+        },
+        {
+            "file": " (1540).jpg",
+            "similarity": 0.765775174482421
+        },
+        {
+            "file": " (4109).jpg",
+            "similarity": 0.7529648366843276
+        },
+        {
+            "file": " (3749).jpg",
+            "similarity": 0.7273620028787473
+        },
+        {
+            "file": " (1100).jpg",
+            "similarity": 0.716946102807924
+        },
+        {
+            "file": " (232).jpg",
+            "similarity": 0.7143985799843264
+        },
+        {
+            "file": " (1246).jpg",
+            "similarity": 0.7140735565141494
+        },
+        {
+            "file": " (1327).jpg",
+            "similarity": 0.7114653562124698
+        },
+        {
+            "file": " (1374).jpg",
+            "similarity": 0.7026109831033125
+        },
+        {
+            "file": " (4621).jpg",
+            "similarity": 0.7014046597359709
+        }
+    ]
+}
