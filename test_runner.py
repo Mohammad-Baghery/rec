@@ -1,10 +1,9 @@
-# test_runner.py (Control Panel Version)
+# test_runner.py (Final Control Panel for Data-Centric Architecture)
 
 import os
 import time
-import shutil
-import logging
 from app2 import App2
+from src.face_db_manager import FaceDBManager
 from config import *
 
 # ===================================================================
@@ -12,147 +11,104 @@ from config import *
 # ===================================================================
 
 # 1. CHOOSE THE MODE TO RUN
-# This is the main switch to decide what the script will do.
-# Available options: "index", "compare", "folder_to_folder", "sort"
-SELECTED_MODE = "sort"
+#    - "add_faces":  (Simulates UI) Adds file paths from a folder to the DB.
+#    - "index":      (Backend Task) Processes all unindexed faces in the DB.
+#    - "sort":       (Backend Task) Groups unassigned, indexed faces into new Person documents.
+#    - "compare":    (Backend Task) Compares one specific face against a list of others.
+#    - Other modes like "enroll_from_ids", "identify_from_id" can be added here.
+SELECTED_MODE = "add_faces"
 
-# 2. DEFINE ALL YOUR PATHS HERE
-# Define all potential paths you will use. You don't need to change them
-# every time, just set them up once.
-PATH_TARGET_IMAGE = "D:\\python\\Face Compare\\Face\\Cut\\IMG_0020c.jpg"
-PATH_FOLDER_A = "D:\\python\\Face Compare\\Face\\33-stream"
-PATH_FOLDER_B = "D:\\python\\Face Compare\\Face\\Cut"  # Example for folder-to-folder
-PATH_UNSORTED_FACES = "D:\\python\\Face Compare\\Face\\33-stream"  # Example for sorting
-PATH_NEW_FACES_TO_INDEX = "D:\\python\\Face Compare\\Face\\new_day_faces"  # Example for indexing
-
-# Define output paths
-PATH_SORTING_OUTPUT = "D:\\python\\Face Compare\\Face\\sorted_output"
-PATH_RESULTS_OUTPUT = "D:\\test-result"
+# 2. CONFIGURE PATHS
+#    This is mainly for the 'add_faces' simulation.
+PATH_TO_ADD_TO_DB = "D:\\python\\Face Compare\\Face\\33-stream"
 
 # 3. CONFIGURE PARAMETERS
-# Adjust these values as needed for your tasks.
-THRESHOLD_COMPARISON = 0.7
-THRESHOLD_SORTING = 0.90
-MIN_FACES_FOR_SORT_GROUP = 2
-MAX_RESULTS_TO_DISPLAY = 20
-SHOULD_UPDATE_DB = True  # Set to True to index folders before comparing
+SORTING_THRESHOLD = 0.88
+MIN_FACES_FOR_SORT_GROUP = 3
+COMPARISON_THRESHOLD = 0.7
 
 
 # ===================================================================
 # --- SCRIPT EXECUTION LOGIC (No need to edit below this line) ---
 # ===================================================================
 
-def clean_up_old_files():
-    """Deletes old database, log, and results folders."""
-    print("Cleaning up old database, log, and results folders...")
-    logger_name = "FaceRecAppLogger"
-    if logging.getLogger(logger_name).handlers:
-        for handler in list(logging.getLogger(logger_name).handlers):
-            handler.close()
-            logging.getLogger(logger_name).removeHandler(handler)
-        print("Closed existing log handlers.")
+def simulate_ui_adding_faces(db_manager: FaceDBManager, folder_path: str):
+    """This function simulates a UI adding file paths to the database."""
+    print(f"\n--- Simulating UI: Adding file paths from '{folder_path}' to the database ---")
+    if not os.path.isdir(folder_path):
+        print(f"ERROR: The folder '{folder_path}' does not exist.")
+        return
 
-    folders_to_clean = [
-        os.path.join(BASE_PROJECT_DIR, "database"),
-        os.path.join(BASE_PROJECT_DIR, "logs"),
-        PATH_RESULTS_OUTPUT,
-        PATH_SORTING_OUTPUT
-    ]
-    for folder_path in folders_to_clean:
-        if os.path.exists(folder_path):
-            try:
-                shutil.rmtree(folder_path)
-                print(f"Removed: {folder_path}")
-            except OSError as e:
-                print(f"Error removing {folder_path}: {e}")
-    print("Clean-up complete.")
+    file_paths = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if
+                  f.lower().endswith(('.jpg', '.png', '.jpeg'))]
+    added_count = db_manager.add_face_paths(file_paths)
+    print(f"--- UI Simulation Complete: Added {added_count} new file paths to the 'faces' collection. ---")
 
 
 if __name__ == "__main__":
-    # If you want a fresh start for every run, uncomment the next line.
-    # For real use (like daily indexing), you should keep it commented.
-    # clean_up_old_files()
-
-    # Ensure necessary directories exist
-    os.makedirs(os.path.join(BASE_PROJECT_DIR, "database"), exist_ok=True)
-    os.makedirs(os.path.join(BASE_PROJECT_DIR, "logs"), exist_ok=True)
-    os.makedirs(PATH_RESULTS_OUTPUT, exist_ok=True)
-    os.makedirs(PATH_SORTING_OUTPUT, exist_ok=True)
+    # --- Basic Setup ---
+    os.makedirs(os.path.join(BASE_PROJECT_DIR, "database"), exist_ok=True)  # For Annoy index
+    os.makedirs(LOGS_FOLDER, exist_ok=True)
+    os.makedirs(RESULTS_FOLDER, exist_ok=True)
+    print("Reminder: Make sure your MongoDB server is running.")
 
     app_instance = App2(use_gpu=True)
-
+    db_manager_for_setup = FaceDBManager()
     config_to_set = {}
     print(f"\n--- Preparing to run mode: '{SELECTED_MODE}' ---")
 
-    # --- Configure the application based on the SELECTED_MODE ---
-    if SELECTED_MODE == "index":
-        print(f"Source Folder for Indexing: {PATH_NEW_FACES_TO_INDEX}")
+    # --- Mode-Specific Logic ---
+    if SELECTED_MODE == "add_faces":
+        simulate_ui_adding_faces(db_manager_for_setup, PATH_TO_ADD_TO_DB)
+        exit()
+
+    elif SELECTED_MODE == "index":
+        config_to_set = {"mode": "index"}
+
+    elif SELECTED_MODE == "sort":
+        # Get all faces that have an embedding but no person_id assigned yet
+        unassigned_faces = list(db_manager_for_setup.db.faces.find(
+            {"person_id": None, "embedding": {"$ne": None}},
+            {"_id": 1}
+        ))
+        face_ids_to_sort = [str(face['_id']) for face in unassigned_faces]
+        print(f"Found {len(face_ids_to_sort)} unassigned faces to sort.")
         config_to_set = {
-            "mode": "index",
-            "source_folder_path": PATH_NEW_FACES_TO_INDEX
+            "mode": "sort", "sorting_face_ids": face_ids_to_sort,
+            "sorting_threshold": SORTING_THRESHOLD, "min_faces_per_group": MIN_FACES_FOR_SORT_GROUP
         }
 
     elif SELECTED_MODE == "compare":
-        print(f"Target Image: {PATH_TARGET_IMAGE}")
-        print(f"Source Folder: {PATH_FOLDER_A}")
-        config_to_set = {
-            "mode": "compare",
-            "target_path": PATH_TARGET_IMAGE,
-            "source_folder_path": PATH_FOLDER_A,
-            "comparison_threshold": THRESHOLD_COMPARISON,
-            "max_display_results": MAX_RESULTS_TO_DISPLAY,
-            "update_db": SHOULD_UPDATE_DB
-        }
+        # For this test, let's compare the first face against the next 100
+        faces = list(db_manager_for_setup.db.faces.find(
+            {"embedding": {"$ne": None}}, {"_id": 1}).limit(101))
 
-    elif SELECTED_MODE == "folder_to_folder":
-        print(f"Folder A: {PATH_FOLDER_A}")
-        print(f"Folder B: {PATH_FOLDER_B}")
-        config_to_set = {
-            "mode": "folder_to_folder",
-            "target_folder_path": PATH_FOLDER_A,
-            "source_folder_path": PATH_FOLDER_B,
-            "comparison_threshold": THRESHOLD_COMPARISON,
-            "update_db": SHOULD_UPDATE_DB
-        }
+        if len(faces) < 2:
+            print("ERROR: Need at least 2 indexed faces to run comparison.")
+            exit()
 
-    elif SELECTED_MODE == "sort":
-        print(f"Source Folder for Sorting: {PATH_UNSORTED_FACES}")
-        print(f"Output Path: {PATH_SORTING_OUTPUT}")
+        target_id = str(faces[0]['_id'])
+        source_ids = [str(face['_id']) for face in faces[1:]]
+        print(f"Comparing face ID {target_id} against {len(source_ids)} other faces.")
         config_to_set = {
-            "mode": "sort",
-            "source_folder_path": PATH_UNSORTED_FACES,
-            "sorting_output_path": PATH_SORTING_OUTPUT,
-            "sorting_threshold": THRESHOLD_SORTING,
-            "min_faces_per_group": MIN_FACES_FOR_SORT_GROUP
+            "mode": "compare", "target_face_id": target_id,
+            "source_face_ids": source_ids, "comparison_threshold": COMPARISON_THRESHOLD
         }
 
     else:
-        print(f"ERROR: Invalid mode '{SELECTED_MODE}' selected. Exiting.")
+        print(f"ERROR: Invalid mode '{SELECTED_MODE}' selected.")
         exit()
 
     # --- Common Execution Logic ---
     if config_to_set:
-        app_instance.set_config(**config_to_set)
+        app_instance.config(**config_to_set)
+        app_instance.run_operation()
 
-        result = app_instance.run_operation()
-        print(f"--- Operation start command sent. Result: {result} ---")
-
-        i = 0
-        timeout_seconds = 1800  # 30 minutes, adjust if needed
-        while True:
-            status = app_instance.get_status()
-            print(f"--- Status: {status['status']} ({status['progress']}%) - {status['details']}")
-
-            if status['status'] in [STATUS_COMPLETE, STATUS_ERROR, STATUS_INCOMPLETE]:
-                print(f"\n--- Final Status Received: {status} ---")
-                break
-
-            i += 1
-            if i > timeout_seconds:
-                print(f"\n--- Timeout after {timeout_seconds} seconds. Sending stop request. ---")
-                app_instance.stop_processing()
-                break
-
+        while app_instance.is_active():
             time.sleep(1)
+
+        final_status = app_instance.get_status()
+        print("\n--- Final Status from Core App ---")
+        print(f"Status: {final_status['status']}, Details: {final_status['details']}")
 
     print("\nTest script finished.")
