@@ -1,4 +1,4 @@
-# src/feature_extractor.py (Refactored for cleaner responsibility)
+# src/feature_extractor.py (Final Corrected Version)
 
 import os
 import cv2
@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from facenet_pytorch import InceptionResnetV1
 from PIL import Image
 import logging
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Optional, Dict, Any, List
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
 from tqdm import tqdm
